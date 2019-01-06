@@ -150,12 +150,9 @@ class SensorAPI(object):
 
     def save_to_file(self, id, value, prefix):
         sensor_name = "%s_%s" % (prefix, str(id))
-        use_kairosdb = (self.cache["config"]["kairos_db"].__dict__["value"] == "YES")
 
-        if use_kairosdb:
-            self.write_to_tsdb(prefix, sensor_name, value)
-        else:
-            self.write_to_logfile(sensor_name, value)
+        self.write_to_tsdb(prefix, sensor_name, value)
+        #self.write_to_logfile(sensor_name, value)
 
     def write_to_logfile(self, sensor_name, value):
         filename = "./logs/%s.log" % sensor_name
@@ -166,6 +163,39 @@ class SensorAPI(object):
             file.write(msg)
 
     def write_to_tsdb(self, prefix, sensor_name, value):
+        use_kairosdb = (self.cache["config"]["kairos_db"].__dict__["value"] == "YES")
+        use_ubidots = (self.cache["config"]["ubidots_db"].__dict__["value"] == "YES")
+
+        if use_kairosdb:
+            self.write_to_kairosdb( prefix, sensor_name, value)
+        if use_ubidots:
+            self.write_to_ubidots( prefix, sensor_name, value)
+
+
+    def write_to_ubidots(self, prefix, sensor_name, value):
+        TOKEN = self.cache["config"]["ubidots_db_token"].__dict__["value"] 
+        DEVICE_LABEL = self.cache["config"]["ubidots_db_device_name"].__dict__["value"] 
+        url = "http://things.ubidots.com"
+        url = "{}/api/v1.6/devices/{}".format(url, DEVICE_LABEL)
+        headers = {"X-Auth-Token": TOKEN, "Content-Type": "application/json"}
+
+        payload = { sensor_name: value }
+
+        # Makes the HTTP requests
+        status = 400
+        attempts = 0
+        while status >= 400 and attempts <= 5:
+            req = requests.post(url=url, headers=headers, json=payload)
+            status = req.status_code
+            attempts += 1
+            time.sleep(1)
+
+        # Processes results
+        if status >= 400:
+            self.logger.warning("Failed to write time series entry to ubidots for [%s]. Response [%s]", sensor_name, status)
+
+
+    def write_to_kairosdb(self, prefix, sensor_name, value):
         kairosdb_server = "http://127.0.0.1:" + self.cache["config"]["kairos_db_port"].__dict__["value"]
 
         data = [
@@ -182,12 +212,8 @@ class SensorAPI(object):
             self.logger.warning("Failed to write time series entry for [%s]. Response [%s]", sensor_name, response)
 
     def log_action(self, text):
-        use_kairosdb = (self.cache["config"]["kairos_db"].__dict__["value"] == "YES")
-
-        if use_kairosdb:
-            self.write_to_tsdb("action", "action", text)
-        else:
-            self.write_to_logfile("action", text)
+        self.write_to_tsdb("action", "action", text)
+        #self.write_to_logfile("action", text)
 
     def shutdown_sensor(self, id):
         self.cache.get("sensors")[id].stop()
