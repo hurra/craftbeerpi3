@@ -18,6 +18,8 @@ import time
 import uuid
 import logging
 
+# Fuer prometheus
+from prometheus_client import CollectorRegistry, Gauge, push_to_gateway
 
 class NotificationAPI(object):
     pass
@@ -165,11 +167,23 @@ class SensorAPI(object):
     def write_to_tsdb(self, prefix, sensor_name, value):
         use_kairosdb = (self.cache["config"]["kairos_db"].__dict__["value"] == "YES")
         use_ubidots = (self.cache["config"]["ubidots_db"].__dict__["value"] == "YES")
+        use_prometheus = (self.cache["config"]["prometheus_pushgateway_enabled"].__dict__["value"] == "YES")
 
         if use_kairosdb:
             self.write_to_kairosdb( prefix, sensor_name, value)
         if use_ubidots:
             self.write_to_ubidots( prefix, sensor_name, value)
+        if use_prometheus:
+            self.write_to_prometheus( prefix, sensor_name, value)
+
+    def write_to_prometheus(self, prefix, sensor_name, value):
+        pg_server_port = self.cache["config"]["prometheus_pushgateway_host_port"].__dict__["value"] 
+        pg_job_name = self.cache["config"]["prometheus_pushgateway_job_name"].__dict__["value"] 
+
+        registry = CollectorRegistry()
+        g = Gauge(sensor_name, 'kein Plan', ['prefix','brew'],registry=registry)
+        g.labels(prefix=prefix,brew=self.cache["active_brew"]).set(value)
+        push_to_gateway(pg_server_port, job=pg_job_name, registry=registry)
 
 
     def write_to_ubidots(self, prefix, sensor_name, value):
