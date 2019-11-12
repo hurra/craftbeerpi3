@@ -19,7 +19,7 @@ import uuid
 import logging
 
 # Fuer prometheus
-from prometheus_client import CollectorRegistry, Gauge, push_to_gateway
+from prometheus_client import CollectorRegistry, Gauge, push_to_gateway,pushadd_to_gateway
 
 class NotificationAPI(object):
     pass
@@ -175,17 +175,21 @@ class SensorAPI(object):
             self.write_to_ubidots( prefix, sensor_name, value)
         if use_prometheus:
             self.write_to_prometheus( prefix, sensor_name, value)
-
+    
     def write_to_prometheus(self, prefix, sensor_name, value):
         pg_server_port = self.cache["config"]["prometheus_pushgateway_host_port"].__dict__["value"] 
         pg_job_name = self.cache["config"]["prometheus_pushgateway_job_name"].__dict__["value"] 
-
+        #print("prefix: " + str(prefix))
+        #print("sensor_name: " + str(sensor_name))
+        #print("value: " + str(value))
+        #print("self.cache: " + json.dumps(self.cache["active_brew"]))
         registry = CollectorRegistry()
         g = Gauge(sensor_name, 'kein Plan', ['prefix','brew'],registry=registry)
-        g.labels(prefix=prefix,brew=self.cache["active_brew"]).set(value)
-        push_to_gateway(pg_server_port, job=pg_job_name, registry=registry)
+        g.labels(prefix=prefix,brew=self.cache["active_brew"]).set(float(value))
+        pushadd_to_gateway(pg_server_port, job=pg_job_name, registry=registry)
+        #print("done")
 
-
+   
     def write_to_ubidots(self, prefix, sensor_name, value):
         TOKEN = self.cache["config"]["ubidots_db_token"].__dict__["value"] 
         DEVICE_LABEL = self.cache["config"]["ubidots_db_device_name"].__dict__["value"] 
@@ -226,8 +230,8 @@ class SensorAPI(object):
             self.logger.warning("Failed to write time series entry for [%s]. Response [%s]", sensor_name, response)
 
     def log_action(self, text):
-        self.write_to_tsdb("action", "action", text)
-        #self.write_to_logfile("action", text)
+        #self.write_to_tsdb("action", "action", text)
+        self.write_to_logfile("action", text)
 
     def shutdown_sensor(self, id):
         self.cache.get("sensors")[id].stop()
